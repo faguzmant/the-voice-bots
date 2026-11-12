@@ -4,8 +4,8 @@
 //     la protección de verdad es restringir la key a la dirección de esta página en Google Cloud. Mira el README.)
 // 2) Guarda el archivo (Commit changes). En 1 o 2 minutos la página ya funciona.
 window.TV_CONFIG = {
-  KEY_A: "AQ.Ab8RN6L9gfwNiRF-jd_C2d3J",
-  KEY_B: "IR74lLwbFjM8OPEoedpPJ_omZg",
+  KEY_A: "AQ.Ab8RN6JnlOVHsSv_6Oh",
+  KEY_B: "3JWzI_f6iKlpuXZ8VyxrClNqewMwU6Q",
   // Modelos que prueba, en orden. Si uno no existe o se agota, pasa al siguiente.
   MODELS: ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite"]
 };
