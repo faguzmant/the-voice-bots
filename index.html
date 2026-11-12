@@ -1,0 +1,527 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>The Voice Bots</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=DM+Sans:wght@400;500;700&display=swap">
+<style>
+/* Layout: one-screen group chat. Setup card first (pick who you are + mission), then chat with a vote bar on top
+   showing where each of the 3 bots stands (no / duda / sí). Dark night-chat look, amber as the single accent;
+   each friend has a fixed colour for name, avatar and vote chip. */
+:root {
+  --bg: #0e1014; --panel: #161920; --panel-2: #1d212a; --line: #2a2f3a;
+  --ink: #eceaf2; --dim: #9a98a8;
+  --accent: #ffb454; --accent-ink: #1a1204;
+  --me: #34407a; --me-ink: #f1f3ff; --bubble: #1d212a;
+  --c-felipe: #6ea8ff; --c-seba: #ff9a5c; --c-beni: #4fd1a0; --c-aye: #c78bff;
+  --yes: #4fd1a0; --maybe: #ffb454; --no: #ff6b6b;
+  --font-display: "Bricolage Grotesque", "Arial Narrow", system-ui, sans-serif;
+  --font-body: "DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #f1eff4; --panel: #ffffff; --panel-2: #f6f5f9; --line: #dedbe6;
+    --ink: #18171d; --dim: #625f70;
+    --accent: #b4620a; --accent-ink: #ffffff;
+    --me: #dfe5ff; --me-ink: #14193a; --bubble: #ffffff;
+    --c-felipe: #2563c9; --c-seba: #c2570f; --c-beni: #0f8a62; --c-aye: #8a3fd1;
+    --yes: #0f8a62; --maybe: #a86300; --no: #c93434;
+    color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #f1eff4; --panel: #ffffff; --panel-2: #f6f5f9; --line: #dedbe6;
+  --ink: #18171d; --dim: #625f70;
+  --accent: #b4620a; --accent-ink: #ffffff;
+  --me: #dfe5ff; --me-ink: #14193a; --bubble: #ffffff;
+  --c-felipe: #2563c9; --c-seba: #c2570f; --c-beni: #0f8a62; --c-aye: #8a3fd1;
+  --yes: #0f8a62; --maybe: #a86300; --no: #c93434;
+  color-scheme: light;
+}
+html, body { height: 100%; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 16px; line-height: 1.45;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 14px 14px;
+  box-sizing: border-box;
+}
+.app { height: 100%; max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+button, input, textarea { font: inherit; color: inherit; }
+button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+h1 { font-family: var(--font-display); font-weight: 800; font-size: clamp(1.6rem, 5vw, 2.2rem); line-height: 1; margin: 0; letter-spacing: -.01em; }
+h1 span { color: var(--accent); }
+.sub { color: var(--dim); font-size: .85rem; }
+[data-c="Felipe"] { --c: var(--c-felipe); } [data-c="Seba"] { --c: var(--c-seba); }
+[data-c="Beni"] { --c: var(--c-beni); } [data-c="Aye"] { --c: var(--c-aye); }
+.av { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; flex: none;
+  background: color-mix(in srgb, var(--c) 22%, var(--panel)); color: var(--c); font: 800 1.05rem var(--font-display); border: 1.5px solid color-mix(in srgb, var(--c) 55%, transparent); }
+.av.sm { width: 30px; height: 30px; font-size: .85rem; }
+
+/* Setup */
+.setup { flex: 1; min-height: 0; overflow-y: auto; display: grid; align-content: start; gap: 20px; padding-bottom: 6px; }
+.lead { margin: 0; color: var(--dim); max-width: 60ch; }
+.lbl { font-size: .72rem; letter-spacing: .12em; text-transform: uppercase; color: var(--dim); font-weight: 700; margin: 0 0 8px; }
+.who { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.card { display: flex; gap: 12px; align-items: center; text-align: left; background: var(--panel); border: 1.5px solid var(--line); border-radius: 14px; padding: 12px; cursor: pointer; min-width: 0; }
+.card:hover { border-color: color-mix(in srgb, var(--c) 60%, var(--line)); }
+.card[aria-pressed="true"] { border-color: var(--c); background: color-mix(in srgb, var(--c) 12%, var(--panel)); }
+.card b { display: block; font-family: var(--font-display); font-size: 1.15rem; }
+.card span.t { display: block; font-size: .8rem; color: var(--dim); line-height: 1.3; }
+.mission { background: var(--panel); border: 1.5px solid var(--line); border-radius: 14px; padding: 16px; display: grid; gap: 12px; }
+.mission q { font-family: var(--font-display); font-weight: 600; font-size: clamp(1.15rem, 3.6vw, 1.45rem); line-height: 1.2; quotes: none; text-wrap: balance; }
+.row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.btn { border-radius: 10px; border: 1.5px solid transparent; padding: 10px 16px; font-weight: 700; cursor: pointer; }
+.btn.primary { background: var(--accent); color: var(--accent-ink); }
+.btn.primary:hover:not(:disabled) { filter: brightness(1.08); }
+.btn.ghost { background: transparent; border-color: var(--line); color: var(--ink); }
+.btn.ghost:hover:not(:disabled) { border-color: var(--dim); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.custom { flex: 1 1 220px; background: var(--panel-2); border: 1.5px solid var(--line); border-radius: 10px; padding: 10px 12px; min-width: 0; }
+.rules { margin: 0; padding-left: 18px; color: var(--dim); font-size: .88rem; display: grid; gap: 3px; }
+
+/* Chat */
+.bar { display: grid; gap: 8px; background: var(--panel); border: 1.5px solid var(--line); border-radius: 14px; padding: 10px 12px; }
+.mis { font-size: .85rem; color: var(--dim); }
+.mis b { color: var(--ink); font-weight: 700; }
+.votes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.vote { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.vote .n { font-weight: 700; font-size: .88rem; line-height: 1.1; overflow: hidden; text-overflow: ellipsis; }
+.pill { display: inline-block; margin-top: 2px; font-size: .68rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 1px 8px; border-radius: 99px; border: 1px solid currentColor; transition: color .3s; }
+.pill.no { color: var(--no); } .pill.duda { color: var(--maybe); } .pill.si { color: var(--yes); background: color-mix(in srgb, var(--yes) 15%, transparent); }
+.log { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding: 6px 2px; scroll-behavior: smooth; }
+.sys { align-self: center; max-width: 90%; text-align: center; font-size: .8rem; color: var(--dim); background: var(--panel-2); border-radius: 99px; padding: 4px 14px; margin: 6px 0; }
+.sys.err { color: var(--no); border: 1px solid color-mix(in srgb, var(--no) 50%, transparent); background: transparent; border-radius: 12px; }
+.msg { display: flex; gap: 8px; align-items: flex-end; max-width: 88%; animation: pop .18s ease-out; }
+.msg .b { background: var(--bubble); border: 1px solid var(--line); border-radius: 14px 14px 14px 4px; padding: 7px 11px; min-width: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+.msg .nm { display: block; font-size: .74rem; font-weight: 700; color: var(--c); margin-bottom: 1px; }
+.msg.cont .av { visibility: hidden; }
+.msg.cont .nm { display: none; }
+.msg.me { align-self: flex-end; flex-direction: row-reverse; }
+.msg.me .b { background: var(--me); color: var(--me-ink); border-color: transparent; border-radius: 14px 14px 4px 14px; }
+.msg.me .nm { color: inherit; opacity: .75; text-align: right; }
+.typing { display: flex; gap: 8px; align-items: center; color: var(--dim); font-size: .8rem; min-height: 30px; }
+.dots i { display: inline-block; width: 6px; height: 6px; margin-right: 3px; border-radius: 50%; background: var(--dim); animation: bounce 1s infinite; }
+.dots i:nth-child(2) { animation-delay: .15s; } .dots i:nth-child(3) { animation-delay: .3s; }
+@keyframes bounce { 0%, 60%, 100% { transform: translateY(0); opacity: .5; } 30% { transform: translateY(-4px); opacity: 1; } }
+@keyframes pop { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.composer { display: grid; gap: 8px; }
+.send { display: flex; gap: 8px; align-items: flex-end; }
+.send textarea { flex: 1; resize: none; min-width: 0; background: var(--panel); border: 1.5px solid var(--line); border-radius: 14px; padding: 10px 12px; max-height: 120px; }
+.send .btn { padding: 11px 18px; }
+.mini { display: flex; gap: 8px; flex-wrap: wrap; }
+.mini .btn { padding: 6px 12px; font-size: .82rem; font-weight: 500; }
+.end { text-align: center; background: var(--panel); border: 1.5px solid var(--line); border-radius: 14px; padding: 16px; display: grid; gap: 10px; justify-items: center; }
+.end h2 { font-family: var(--font-display); font-size: 1.5rem; margin: 0; }
+.end.win { border-color: var(--yes); } .end.lose { border-color: var(--no); }
+.end p { margin: 0; color: var(--dim); max-width: 50ch; }
+.note { color: var(--dim); font-size: .8rem; }
+@media (max-width: 520px) {
+  .who { grid-template-columns: minmax(0, 1fr); }
+  .votes { gap: 6px; } .vote .av { width: 28px; height: 28px; font-size: .8rem; }
+  .msg { max-width: 94%; }
+}
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
+</style>
+<style>[hidden]{display:none!important}html,body{margin:0}img{max-width:100%}</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <h1>The Voice <span>Bots</span></h1>
+    <div class="sub">4 amigos, 1 chat, cero acuerdos</div>
+  </header>
+  <div id="stage" style="display:contents"></div>
+</div>
+
+<script src="config.js"></script>
+<script>
+(() => {
+  const NAMES = ["Felipe", "Seba", "Beni", "Aye"];
+  const TAG = {
+    Felipe: "El anfitrión que siempre pone la casa",
+    Seba: "Banco, pero no puedo",
+    Beni: "Sólido (según él)",
+    Aye: "El cuerdo que no toma"
+  };
+  const DOSSIER = {
+    Felipe: `FELIPE ("el pelao", "Felipe Guzmán"): el anfitrión y organizador del grupo. Pregunta "hoy algo?", "a qué hora?", "quién pa jugar una wea", y se queja a cada rato de que él es el único que pone la casa. Obsesionado con la cuota de la carne y con que nadie confirma ("@all confirmen rápido pa meterlos en la cuota"). Pedante con los datos y las medidas ("yo me muevo con milímetros", "cuando llegues a notación científica me avisas", "30min en 6min/km"). Gamer: juegos de cartas con builds, KSP, Counter. Humor seco: responde con un "?" solo, "😂😂😂", "wea mala", "oc", "qlo", "weon", "perro", "ctm", "tonto imbécil gordo". Se pone en MAYÚSCULAS cuando se emociona ("ESOOOO", "AFUERAAA"). Todo se lo cobra: la casa, la bencina, la plata de la carne. Se ablanda cuando le prometen justicia (que otro ponga la casa), precisión (hora y plan claros) o un juego.`,
+    Seba: `SEBA ("Rosselot"): el eterno "banco" (estoy dentro) que después se baja: "me escapo por último", "no llego hasta las 10", "si me animo el viernes". Ahora está soltero porque terminó con la isi: los amigos lo molestan por eso y él se hace el que no le importa. Condiciona todo a "mis cabros de la u", a la pega y al auto. Presumido de plata y estatus ("mi máximo es 700k 🤑", "pasenlo chancho pobretones, yo acá en un bar con vista al mar", "vamos al Enjoy de Pucón a gastar el sueldo"). Flojo para pensar: "me da lata pensar y le dejo eso a los plebeyos mientras Claude Code me hace el informe". Trollea a Benito por su peso ("cállate obeso mórbido"). Muletillas: "wn", "po wn", "puta", "qlo", "culiao", "hermano", "oficial", "hermoso", "insane", "sólido", "ah sabe", "down" (como insulto tonto), "nica", "yo cacho que", "automegatroing", "me vale pico". Escribe corto, a veces con mayúscula inicial, a veces todo minúscula. Se convence con plata gratis, estatus, algo "oficial".`,
+    Beni: `BENI ("Benito", "Pala", "Palacete"): gym bro delirante. Dice "estoy enorme", "6% de grasa", "levanto 110 en press banca", "soy un wn sólido", "soy el más sabio", y todos lo tratan de gordo y de viejo. Convierte cualquier plan en rutina de gimnasio, trote o dieta. Escribe con mayúscula inicial, a veces con MAYÚSCULAS, usa "q", "pa", "algn", "wn" seguido, "pico", "ctm", "rico", "god", "bue", "nica", "fact". Hace encuestas ("Encuesta: sábado 22: Puedo / No"), llama con "@all", manda links de tiktok e instagram sin que nadie los pida. Estudiante de diseño gráfico a punto de titularse: vive estresado ("tengo mil weas no puedo echarme NADA", "solo tengo ayudantía"). Juega tenis, trota, toma cold brew. Se queja de la plata ("me gasté luca en dulces"). Emojis: 😹 😭 🔥 🦅 👏. Se convence con comida, con que lo llamen sólido y con que le sirva para el gym.`,
+    Aye: `AYE ("el Aye"): el más lúcido y sarcástico. Escribe más largo y ordenado, casi siempre con lógica fría y un "pero" al final. Muletillas: "pta", "lit", "0 rollo", "hermano", "raja" (cansado), "k bros", "dle", "fact", "tragedia", "ql", "pero wn", "toy". No toma alcohol y se hace el cuerdo ("el Aye no toma"). Techie: impresoras 3D de resina ("voy a montarme una estación Walter White"), modelos y animaciones 3D, proyecto de título. Trabaja en una oficina en Ciudad Empresarial. Siempre propone "mejor en otra casa" porque su vieja va a estar en la casa, o porque está raja, o porque tiene pega. Condiciona todo ("si es que se puede", "no tenemos que obligadamente..."). Tira frases como "¿y quién chucha dijo que quiero ir?" y "Perdón, se me había olvidado que soy el único que no es gordo ni feo en este grupo". Casi no usa emojis; se ríe con "jajajajajajaja". Se convence con lógica, comodidad, plan corto sin obligación y algo técnico o de tecnología.`
+  };
+  const APODOS = {
+    Felipe: '"pelao", "pelado" o "Felipe"',
+    Seba: '"Seba", "Rosselot" o "el Seba"',
+    Beni: '"Benito", "Pala" o "Palacete"',
+    Aye: '"Aye" o "el Aye"'
+  };
+  const MISSIONS = [
+    "Armar un asado este sábado en una casa que no sea la de Felipe",
+    "Juntarse a jugar Catan sin que nadie se baje a último minuto",
+    "Planear un viaje de un fin de semana a la montaña",
+    "Ir todos juntos al cine y pagar entrada, popcorn y estacionamiento",
+    "Armar un carrete en casa de alguien antes de que cierren los botillerías",
+    "Salir a correr 5k en grupo y después tomar cerveza",
+    "Ir al Enjoy de Pucón a gastar el sueldo",
+    "Acampar en un cerro y que alguien lleve el carbón",
+    "Hacer un pre antes del cumpleaños de un amigo y llegar todos a la misma hora",
+    "Ir a la feria de cafés del MUT a la hora de almuerzo",
+    "Armar torneo de padel y después asado en la casa de Beni",
+    "Hacer una noche de juegos con pizza, pool y ping pong"
+  ];
+  const VOTE_ORDER = ["no", "duda", "si"];
+  const VOTE_LABEL = { no: "No", duda: "Duda", si: "Sí" };
+
+  const $ = (s, r = document) => r.querySelector(s);
+  const stage = $("#stage");
+  const el = (tag, attrs = {}, ...kids) => {
+    const n = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) {
+      if (k === "class") n.className = v;
+      else if (k.startsWith("on")) n.addEventListener(k.slice(2), v);
+      else if (v !== false && v != null) n.setAttribute(k, v === true ? "" : v);
+    }
+    for (const k of kids.flat()) if (k != null) n.append(k.nodeType ? k : document.createTextNode(String(k)));
+    return n;
+  };
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+  const CFG = window.TV_CONFIG || {};
+  const KEY = ((CFG.KEY_A || "") + (CFG.KEY_B || "")).trim();
+  const MODELS = Array.isArray(CFG.MODELS) && CFG.MODELS.length ? CFG.MODELS : ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite"];
+  let aiState = KEY.length > 20 ? "ok" : "off"; // ok | off
+
+  const SAFETY = ["HARM_CATEGORY_HARASSMENT", "HARM_CATEGORY_HATE_SPEECH", "HARM_CATEGORY_SEXUALLY_EXPLICIT", "HARM_CATEGORY_DANGEROUS_CONTENT"]
+    .map(c => ({ category: c, threshold: c === "HARM_CATEGORY_HARASSMENT" ? "BLOCK_NONE" : "BLOCK_ONLY_HIGH" }));
+  function parseJson(txt) {
+    let t = String(txt || "").trim().replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
+    try { return JSON.parse(t); } catch {}
+    const a = t.indexOf("{"), b = t.lastIndexOf("}");
+    if (a >= 0 && b > a) { try { return JSON.parse(t.slice(a, b + 1)); } catch {} }
+    throw { code: "invalid_json" };
+  }
+  // One call to Gemini that returns a parsed JSON object. Tries each model in MODELS and retries once on rate limits.
+  async function geminiJson(prompt) {
+    if (KEY.length <= 20) throw { code: "no_key" };
+    let last = { code: "upstream_error" };
+    for (const model of MODELS) {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        let r;
+        try {
+          r = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "x-goog-api-key": KEY },
+            body: JSON.stringify({
+              contents: [{ role: "user", parts: [{ text: prompt }] }],
+              generationConfig: { temperature: 1.1, responseMimeType: "application/json", maxOutputTokens: 1024 },
+              safetySettings: SAFETY
+            })
+          });
+        } catch { last = { code: "network" }; await sleep(1200); continue; }
+        if (r.ok) {
+          const d = await r.json().catch(() => null);
+          const parts = d && d.candidates && d.candidates[0] && d.candidates[0].content && d.candidates[0].content.parts;
+          const text = parts ? parts.map(p => p.text || "").join("") : "";
+          if (!text.trim()) { last = { code: "empty_completion" }; continue; }
+          try { const out = parseJson(text); if (MODELS[0] !== model) { MODELS.splice(MODELS.indexOf(model), 1); MODELS.unshift(model); } return out; } catch (e) { last = e; continue; }
+        }
+        const err = await r.json().catch(() => ({}));
+        const msg = JSON.stringify(err).toLowerCase();
+        if (r.status === 404) { last = { code: "model_missing" }; break; }               // try next model
+        if (r.status === 429) {
+          if (msg.includes("perday") || msg.includes("per day")) { last = { code: "daily_limit" }; break; }
+          last = { code: "rate_limited" }; await sleep(2500); continue;
+        }
+        if (r.status === 400 && msg.includes("api key")) throw { code: "bad_key" };
+        if (r.status === 403) throw { code: "forbidden" };
+        last = { code: "upstream_error" }; await sleep(1000);
+      }
+    }
+    throw last;
+  }
+  let S = { screen: "setup", me: null, mission: pick(MISSIONS), customMission: "", msgs: [], votes: {}, busy: false, status: "playing", turns: 0, lastError: null, errCode: null };
+
+  function pick(a) { return a[Math.floor(Math.random() * a.length)]; }
+  function bots() { return NAMES.filter(n => n !== S.me); }
+  function lsGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
+  function lsSet(k, v) { try { localStorage.setItem(k, v); } catch {} }
+
+  // ---------- Prompt (one friend, one call, full chat as context) ----------
+  const SAMPLES = {
+    Felipe: ["Pala qlo eri super aweonao", "Por que no avisas", "Y tontos qlos si soy el unico que pone la casa", "Oye confirmen si viene pa meterlos en la cuota de la carne", "Pa que se hagan las cosas bien las tiene que hacer uno ctm", "una wea que nunca vas a aprovechar probablemente", "@Beni vale la pena ir o mejor me quedo jugando conter", "ADUERA", "?"],
+    Seba: ["Pelao voy a tu casa y vamos a comprar todos", "Wn mientras no sea yo solo tomando banco loq. Sea", "Realisticamente estoy listo 10.30 comido y todo", "Cállate obeso mórbido dime a que hora llegai pa ver si salimos a comprar", "Pelao compraste copete?", "banco 12-13 que ahí ya no me quedan weas de la u", "Osea", "Osea sabe", "Wn el frio qlo está stupid", "Si pero me vale tula eso igual, paso a saludar nomas"],
+    Beni: ["Avisa esa wea antes de comprar el copete po ctm!!!", "Algn me banca el sábado al MUT?", "Cabros, llego tipo 3 a la casa y almuerzo, alguno banca el carbón?? Está enfermo de lindo el día", "Siempre estay piolita porque eres un wn poco sólido.", "Dale como van a ser tan MALOS pa pagar 2.500 pesos", "En vola puedo jueves wn este viernes solo tengo ayudantía", "Porque estoy enorme", "Me refiero a q tengo mucho músculo", "Y muy poco % de grasa", "Cmo el hoyo"],
+    Aye: ["Pta sorry wn", "Lit realmente si quería juntarme pero me demoré más de lo que pensé en una wea y estoy raja", "Facto que sea en tu casa por wn", "Y por q vo tai obligado a estar?", "Hmmm aunque en verdad preferiría que fuera en otra casa si se puede", "Perdón se me había olvidado que soy el único que no es gordo y feo en este grupo", "Kbros", "Que día de finde juntas?", "Viernes o sábado", "Na na si apaño a conversar un rato pero Max 12:30-1"]
+  };
+  const KEYS = { Felipe: ["felipe", "pelao", "pelado", "guzman", "guzmán"], Seba: ["seba", "rosselot"], Beni: ["beni", "benito", "pala", "palacete"], Aye: ["aye"] };
+  const queue = []; let draining = false, drainWaiters = [], typingFor = null, pendingSpeaker = null, inflight = null;
+
+  function transcript() {
+    const base = S.msgs.filter(m => !m.sys).map(m => ({ n: m.n, t: m.t }));
+    if (inflight) base.push(inflight);
+    for (const q of queue) if (q.kind === "msg") base.push({ n: q.n, t: q.t });
+    return base;
+  }
+
+  function buildCharPrompt(sp, noNewMsg) {
+    const tr = transcript().slice(-30);
+    const last = tr[tr.length - 1];
+    const hist = tr.map(m => `${m.n}: ${m.t}`).join("\n") || "(el chat recién parte)";
+    const youAreMe = last && last.n === S.me;
+    return `Eres ${sp} en el grupo de WhatsApp "The voice": 4 amigos chilenos de unos 24 años. Escribes SOLO como ${sp}, nunca como otro.
+
+QUIÉN ES QUIÉN (no los confundas):
+- Felipe: le dicen ${APODOS.Felipe}. "pelao" es SOLO de Felipe.
+- Seba: le dicen ${APODOS.Seba}.
+- Beni: le dicen ${APODOS.Beni}.
+- Aye: le dicen ${APODOS.Aye}.
+El jugador es una persona real y juega como ${S.me}. ${S.me === "Felipe" ? "" : `${S.me} NO es Felipe: jamás le digas "pelao" ni "pelado" a ${S.me}, llámalo ${APODOS[S.me]}. `}Tú eres ${sp}: no te nombres a ti mismo. Si hablas de Felipe en tercera persona dices "el pelao". "gordo" se lo dicen entre todos como insulto cariñoso.
+
+TU PERSONAJE (exagera sus manías, pero sin sonar a caricatura de IA):
+${DOSSIER[sp]}
+
+ASÍ ESCRIBES DE VERDAD (copia el largo, el ritmo y la ortografía; nunca repitas estos mensajes):
+${SAMPLES[sp].map(s => `- ${s}`).join("\n")}
+
+MISIÓN DEL JUGADOR: convencer al grupo de "${S.mission}". Tú pones trabas según tus propias manías.
+
+CHAT HASTA AHORA (el último mensaje está al final):
+${hist}
+
+TU TAREA: escribe lo que ${sp} manda ahora.
+- ${noNewMsg ? `Nadie escribió nada nuevo. Reacciona a lo último del chat (de ${last ? last.n : "nadie"}) y, si hace falta, presiona a ${S.me} para que se defina.` : youAreMe ? `El último mensaje es de ${S.me}, el jugador. Respóndele directamente a lo que dijo, o taguea con @Nombre a otro amigo si se lo quieres decir a él.` : `El último mensaje lo escribió ${last ? last.n : "alguien"}. Respóndele a ÉL (puedes nombrarlo con su apodo correcto) o reacciona a lo que acaba de decir.`}
+- Tu mensaje tiene que tener sentido con lo que dijo exactamente esa persona. Lee también los 2 o 3 mensajes anteriores: no repitas lo que ya se dijo ni te contradigas. Si le hablas a alguien que no es el último que escribió, táguea con @Nombre.
+- Mensajes cortos de WhatsApp, casi siempre en minúscula, con abreviaciones y errores reales (q, pa, po, nose). Casi sin puntos ni exclamaciones. Sin comillas ni acotaciones.
+- Manda de 1 a 3 mensajes seguidos para terminar una sola idea, partida como la escribe la gente de verdad (una palabra suelta, una frase cortada que sigue en el mensaje siguiente). Si mandas más de uno, cada mensaje es MUY corto: de 2 a 8 palabras, máximo 40 caracteres. Solo si mandas un único mensaje puede ser un poco más largo (hasta unas 15 palabras).
+- Sin filtro entre amigos: garabatos y burlas pesadas por peso, flojera, plata o manías, como broma. Prohibido: insultos homofóbicos o racistas, nada sexual explícito, enfermedades graves, muertes o temas familiares delicados.
+- Usa solo el vocabulario de tu personaje y de los ejemplos. Evita muletillas chilenas genéricas de IA como "cachai", "bacán", "al tiro", "fome". No pulas: nada de remate ingenioso, de resumir ni de explicar el chiste. No metas todas tus muletillas en un mensaje; la mayoría de los mensajes no lleva ninguna.
+- Nunca digas que eres un bot ni rompas el personaje.
+
+TU VOTO: ahora estás en "${S.votes[sp]}" frente a la misión. Cámbialo solo si lo que se dijo te convence de verdad a TI según lo que te convence (está en tu personaje). De "no" a "duda" es fácil con un buen argumento; a "si" necesitas que ya dudes y que te den una razón concreta. Una mala idea o una repetición no cambia nada, y puedes bajar si el jugador mete la pata. Que sea difícil pero posible.
+
+Responde SOLO con un objeto JSON, sin texto extra ni markdown: {"t":["mensaje 1","mensaje 2"],"voto":"no"}  (voto: "no", "duda" o "si").`;
+  }
+
+  // ---------- Turn engine: one friend at a time, each seeing everything said before ----------
+  function mentioned(text) {
+    const t = " " + text.toLowerCase() + " ";
+    return bots().filter(n => KEYS[n].some(k => new RegExp("[^a-záéíóúñ]" + k + "[^a-záéíóúñ]").test(t)));
+  }
+  function shuffle(a) { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+  function planOrder(userText, lastBot) {
+    const b = bots();
+    const order = userText ? mentioned(userText) : [];
+    order.push(...shuffle(b.filter(n => !order.includes(n))));
+    if (!userText && order.length > 1 && order[0] === lastBot) order.push(order.shift());
+    if (Math.random() < 0.45) order.push(pick(b.filter(n => n !== order[order.length - 1])));
+    return order;
+  }
+
+  async function drain() {
+    if (draining) return; draining = true;
+    while (queue.length) {
+      const it = queue.shift();
+      if (it.kind === "msg") {
+        inflight = { n: it.n, t: it.t };
+        const prev = S.msgs.filter(x => !x.sys).slice(-1)[0];
+        const burst = !!prev && prev.n === it.n && !prev.me;
+        typingFor = it.n; renderTyping();
+        await sleep(burst ? Math.min(1100, 420 + it.t.length * 24) : Math.min(2200, 950 + it.t.length * 34));
+        typingFor = null; addMsg({ n: it.n, t: it.t }); inflight = null;
+      } else {
+        applyVote(it.n, it.v);
+      }
+    }
+    draining = false; renderTyping();
+    drainWaiters.splice(0).forEach(r => r());
+  }
+  function drained() { return draining || queue.length ? new Promise(r => drainWaiters.push(r)) : Promise.resolve(); }
+
+  function applyVote(n, v) {
+    if (VOTE_ORDER.includes(v)) {
+      const cur = VOTE_ORDER.indexOf(S.votes[n]), nxt = VOTE_ORDER.indexOf(v);
+      S.votes[n] = VOTE_ORDER[cur + Math.max(-1, Math.min(1, nxt - cur))];
+    }
+    renderVotes();
+    if (bots().every(x => S.votes[x] === "si")) { S.status = "won"; renderEnd(); }
+  }
+
+  async function runRound(userText) {
+    if (S.busy || S.status !== "playing") return;
+    S.busy = true; S.lastError = null; S.errCode = null; syncComposer(); renderTyping();
+    const lastBot = [...S.msgs].reverse().find(m => !m.sys && !m.me);
+    const order = planOrder(userText, lastBot && lastBot.n);
+    try {
+      for (const sp of order) {
+        if (S.status !== "playing") break;
+        pendingSpeaker = sp; renderTyping();
+        const o = await geminiJson(buildCharPrompt(sp, !userText));
+        let lines = o && (Array.isArray(o.t) ? o.t : typeof o.t === "string" ? [o.t] : []);
+        lines = (lines || []).filter(x => typeof x === "string" && x.trim()).slice(0, 3).map(x => x.trim().slice(0, 260));
+        if (!lines.length) throw { code: "empty_completion" };
+        for (const t of lines) queue.push({ kind: "msg", n: sp, t });
+        queue.push({ kind: "vote", n: sp, v: o && o.voto });
+        drain();
+      }
+      S.turns++;
+    } catch (e) {
+      S.errCode = e && e.code;
+      const MSG = {
+        no_key: "Falta la API key en config.js.",
+        bad_key: "La API key no es válida. Revisa config.js.",
+        forbidden: "Google rechazó la key para esta página. Revisa las restricciones de la key.",
+        daily_limit: "Se acabó el cupo gratis de hoy. Vuelve mañana.",
+        rate_limited: "Están todos escribiendo a la vez y Google pidió calma. Espera unos segundos y vuelve a intentar."
+      };
+      S.lastError = MSG[S.errCode] || "Alguien se quedó sin señal. Escribe de nuevo o toca \"Que hablen ellos\".";
+    }
+    pendingSpeaker = null;
+    await drained();
+    S.busy = false;
+    renderTyping(); syncComposer();
+    if (S.lastError) addSys(S.lastError, true);
+    save();
+  }
+
+  function sendUser(text) {
+    text = text.trim(); if (!text || S.busy || S.status !== "playing") return;
+    addMsg({ n: S.me, t: text, me: true });
+    runRound(text);
+  }
+  function provoke() { runRound(""); }
+
+  // ---------- State helpers ----------
+  function addMsg(m) {
+    const prev = S.msgs.filter(x => !x.sys).slice(-1)[0];
+    m.cont = !!prev && prev.n === m.n && !m.sys;
+    S.msgs.push(m);
+    const log = $("#log"); if (log) { log.insertBefore(msgNode(m), $("#typing")); scrollDown(); }
+  }
+  function addSys(t, err) {
+    const m = { sys: true, t, err: !!err }; S.msgs.push(m);
+    const log = $("#log"); if (log) { log.insertBefore(sysNode(m), $("#typing")); scrollDown(); }
+  }
+  function scrollDown() { const log = $("#log"); if (log) log.scrollTop = log.scrollHeight; }
+  function save() { try { sessionStorage.setItem("tv", JSON.stringify({ S: { ...S, busy: false } })); } catch {} }
+
+  // ---------- Render ----------
+  function avatar(n, sm) { return el("div", { class: "av" + (sm ? " sm" : ""), "data-c": n, "aria-hidden": "true" }, n[0]); }
+  function msgNode(m) {
+    const cls = "msg" + (m.me ? " me" : "") + (m.cont ? " cont" : "");
+    return el("div", { class: cls, "data-c": m.n }, m.me ? null : avatar(m.n, true), el("div", { class: "b" }, el("span", { class: "nm" }, m.n), m.t));
+  }
+  function sysNode(m) { return el("div", { class: "sys" + (m.err ? " err" : ""), role: m.err ? "alert" : null }, m.t); }
+
+  function renderSetup() {
+    stage.replaceChildren(el("section", { class: "setup" },
+      el("p", { class: "lead" }, "Tres bots con la personalidad exagerada de tus amigos, armada a partir del chat real. Tú eliges quién eres, tienes una misión y ellos van a hacer todo lo posible para que no se cumpla."),
+      el("div", {}, el("h2", { class: "lbl" }, "¿Quién eres?"),
+        el("div", { class: "who", role: "group", "aria-label": "Elige quién eres" },
+          NAMES.map(n => el("button", { type: "button", class: "card", "data-c": n, id: "who-" + n, "aria-pressed": String(S.me === n), onclick: () => { S.me = n; lsSet("tv-me", n); renderSetup(); } },
+            avatar(n), el("div", {}, el("b", {}, n), el("span", { class: "t" }, TAG[n])))))),
+      el("div", {}, el("h2", { class: "lbl" }, "Tu misión"),
+        el("div", { class: "mission" },
+          el("q", {}, S.customMission.trim() || S.mission),
+          el("div", { class: "row" },
+            el("button", { type: "button", class: "btn ghost", id: "reroll", onclick: () => { S.customMission = ""; let m; do { m = pick(MISSIONS); } while (m === S.mission); S.mission = m; renderSetup(); } }, "Sortear otra"),
+            el("input", { class: "custom", id: "custom", placeholder: "O escribe tu propia misión", maxlength: "120", value: S.customMission, "aria-label": "Misión propia", oninput: (e) => { S.customMission = e.target.value; const q = $(".mission q"); q.textContent = S.customMission.trim() || S.mission; } })))),
+      el("ul", { class: "rules" },
+        el("li", {}, "Escribe como si fueras tú. Los otros tres contestan en el chat."),
+        el("li", {}, "Arriba ves en qué está cada uno: No, Duda o Sí. Ganas si los tres terminan en Sí."),
+        el("li", {}, "Cada uno se convence con cosas distintas. Descúbrelas.")),
+      el("div", { class: "row" },
+        el("button", { type: "button", class: "btn primary", id: "enter", disabled: !S.me || aiState === "off", onclick: startGame }, "Entrar al grupo"),
+        !S.me ? el("span", { class: "note" }, "Elige quién eres para entrar.") : null,
+        aiState === "off" ? el("span", { class: "note" }, "Falta pegar la API key de Google en config.js.") : null)
+    ));
+  }
+
+  function startGame() {
+    if (!S.me) return;
+    if (S.customMission.trim()) S.mission = S.customMission.trim();
+    S.screen = "chat"; S.msgs = []; S.status = "playing"; S.turns = 0; S.busy = false;
+    S.votes = {}; bots().forEach(n => S.votes[n] = "no");
+    renderChat();
+    addSys(`${S.me} creó la misión: ${S.mission}`);
+    $("#msg").focus();
+    save();
+  }
+
+  function renderVotes() {
+    const box = $("#votes"); if (!box) return;
+    box.replaceChildren(...bots().map(n => el("div", { class: "vote", "data-c": n }, avatar(n, true),
+      el("div", { style: "min-width:0" }, el("div", { class: "n", style: "color:var(--c)" }, n), el("span", { class: "pill " + S.votes[n] }, VOTE_LABEL[S.votes[n]])))));
+  }
+  let typingEl = null;
+  function renderTyping() {
+    const t = $("#typing"); if (!t) return;
+    const show = S.busy || draining || queue.length;
+    t.hidden = !show; t.replaceChildren();
+    if (!show) return;
+    const who = typingFor || pendingSpeaker;
+    t.append(el("span", { class: "dots" }, el("i"), el("i"), el("i")), el("span", {}, who ? `${who} está escribiendo…` : "El grupo está escribiendo…"));
+    scrollDown();
+  }
+  function syncComposer() {
+    const ta = $("#msg"), send = $("#send"), pro = $("#provoke");
+    if (!ta) return;
+    const off = S.busy || S.status !== "playing";
+    ta.disabled = off; send.disabled = off; if (pro) pro.disabled = off;
+    if (!off) ta.focus({ preventScroll: true });
+  }
+  function renderEnd() {
+    const c = $("#composer"); if (!c) return;
+    const win = S.status === "won";
+    c.replaceChildren(el("div", { class: "end " + (win ? "win" : "lose") },
+      el("h2", {}, win ? "Aprobado por unanimidad" : "La misión murió"),
+      el("p", {}, win ? `Los tres dijeron que sí en ${S.turns} ${S.turns === 1 ? "turno" : "turnos"}. Nadie en la historia del grupo había logrado esto.` : "El grupo dejó la misión en visto para siempre."),
+      el("div", { class: "row" },
+        el("button", { class: "btn primary", id: "again", onclick: () => { S.mission = pick(MISSIONS); S.customMission = ""; startGame(); } }, "Otra misión, mismo personaje"),
+        el("button", { class: "btn ghost", onclick: () => { S.screen = "setup"; S.status = "playing"; renderSetup(); } }, "Cambiar de personaje"))));
+  }
+
+  function renderChat() {
+    const log = el("div", { class: "log", id: "log", "aria-live": "polite" }, el("div", { class: "typing", id: "typing", hidden: true }));
+    const ta = el("textarea", { id: "msg", rows: "1", placeholder: `Escribe como ${S.me}…`, "aria-label": "Tu mensaje", maxlength: "500",
+      onkeydown: (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); doSend(); } },
+      oninput: (e) => { e.target.style.height = "auto"; e.target.style.height = Math.min(120, e.target.scrollHeight) + "px"; } });
+    const doSend = () => { const v = ta.value; if (!v.trim() || S.busy) return; ta.value = ""; ta.style.height = "auto"; sendUser(v); };
+    stage.replaceChildren(
+      el("div", { class: "bar" },
+        el("div", { class: "mis" }, "Misión: ", el("b", {}, S.mission)),
+        el("div", { class: "votes", id: "votes", "aria-label": "Votos" })),
+      log,
+      el("div", { class: "composer", id: "composer" },
+        el("div", { class: "send" }, ta, el("button", { class: "btn primary", id: "send", type: "button", onclick: doSend }, "Enviar")),
+        el("div", { class: "mini" },
+          el("button", { class: "btn ghost", id: "provoke", type: "button", onclick: provoke }, "Que hablen ellos"),
+          el("button", { class: "btn ghost", id: "giveup", type: "button", onclick: () => { if (S.busy) return; S.status = "lost"; renderEnd(); } }, "Rendirme"),
+          el("button", { class: "btn ghost", type: "button", onclick: () => { if (S.busy) return; S.screen = "setup"; renderSetup(); } }, "Salir"))))
+    ;
+    for (const m of S.msgs) log.insertBefore(m.sys ? sysNode(m) : msgNode(m), $("#typing", log));
+    renderVotes(); renderTyping(); syncComposer();
+    if (S.status !== "playing") renderEnd();
+  }
+
+  function render() { S.screen === "chat" ? renderChat() : renderSetup(); }
+
+  // ---------- Boot ----------
+  function boot(data) {
+    const saved = (() => { try { return JSON.parse(sessionStorage.getItem("tv") || "null"); } catch { return null; } })();
+    const fromHot = data && data.S;
+    if (fromHot || saved) { try { S = Object.assign(S, (fromHot ? data : saved).S); S.busy = false; } catch {} }
+    if (!S.me) { const m = lsGet("tv-me"); if (NAMES.includes(m)) S.me = m; }
+    if (!S.votes || !Object.keys(S.votes).length) S.votes = {};
+    render();
+  }
+  boot({});
+})();
+</script>
+</body>
+</html>
