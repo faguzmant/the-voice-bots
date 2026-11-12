@@ -206,11 +206,23 @@ h1 span { color: var(--accent); }
     if (a >= 0 && b > a) { try { return JSON.parse(t.slice(a, b + 1)); } catch {} }
     throw { code: "invalid_json" };
   }
-  // One call to Gemini that returns a parsed JSON object. Tries each model in MODELS and retries once on rate limits.
-  async function geminiJson(prompt) {
-    if (KEY.length <= 20) throw { code: "no_key" };
+  // Asks Google which models this key can use, in case the configured names stopped existing.
+  let discovered = false;
+  async function discoverModels() {
+    discovered = true;
+    try {
+      const r = await fetch("https://generativelanguage.googleapis.com/v1beta/models?pageSize=200", { headers: { "x-goog-api-key": KEY } });
+      if (!r.ok) return [];
+      const d = await r.json();
+      const ok = (d.models || []).filter(m => (m.supportedGenerationMethods || []).includes("generateContent"))
+        .map(m => String(m.name).replace(/^models\//, ""))
+        .filter(n => /^gemini-/.test(n) && !/(image|tts|audio|live|embedding|robotics|computer|thinking|exp|vision|preview-)/.test(n));
+      return [...ok.filter(n => /flash-lite/.test(n)), ...ok.filter(n => /flash/.test(n) && !/lite/.test(n))].slice(0, 4);
+    } catch { return []; }
+  }
+  async function tryModels(models) {
     let last = { code: "upstream_error" };
-    for (const model of MODELS) {
+    for (const model of models) {
       for (let attempt = 0; attempt < 2; attempt++) {
         let r;
         try {
@@ -218,32 +230,53 @@ h1 span { color: var(--accent); }
             method: "POST",
             headers: { "Content-Type": "application/json", "x-goog-api-key": KEY },
             body: JSON.stringify({
-              contents: [{ role: "user", parts: [{ text: prompt }] }],
+              contents: [{ role: "user", parts: [{ text: PROMPT_BOX.text }] }],
               generationConfig: { temperature: 1.1, responseMimeType: "application/json", maxOutputTokens: 1024 },
               safetySettings: SAFETY
             })
           });
-        } catch { last = { code: "network" }; await sleep(1200); continue; }
+        } catch (e) { last = { code: "network", detail: "no se pudo conectar con Google" }; await sleep(1200); continue; }
         if (r.ok) {
           const d = await r.json().catch(() => null);
           const parts = d && d.candidates && d.candidates[0] && d.candidates[0].content && d.candidates[0].content.parts;
           const text = parts ? parts.map(p => p.text || "").join("") : "";
-          if (!text.trim()) { last = { code: "empty_completion" }; continue; }
-          try { const out = parseJson(text); if (MODELS[0] !== model) { MODELS.splice(MODELS.indexOf(model), 1); MODELS.unshift(model); } return out; } catch (e) { last = e; continue; }
+          if (!text.trim()) {
+            const why = (d && d.promptFeedback && d.promptFeedback.blockReason) || (d && d.candidates && d.candidates[0] && d.candidates[0].finishReason) || "sin texto";
+            last = { code: "empty_completion", detail: model + ": " + why }; continue;
+          }
+          try { const out = parseJson(text); if (MODELS[0] !== model) { const i = MODELS.indexOf(model); if (i >= 0) MODELS.splice(i, 1); MODELS.unshift(model); } return out; }
+          catch (e) { last = { code: "invalid_json", detail: model + ": respuesta mal formada" }; continue; }
         }
         const err = await r.json().catch(() => ({}));
-        const msg = JSON.stringify(err).toLowerCase();
-        if (r.status === 404) { last = { code: "model_missing" }; break; }               // try next model
+        const em = (err && err.error && err.error.message) || "";
+        const detail = model + ": HTTP " + r.status + (em ? " " + em.slice(0, 140) : "");
+        const low = JSON.stringify(err).toLowerCase();
+        if (r.status === 404) { last = { code: "model_missing", detail }; break; }
         if (r.status === 429) {
-          if (msg.includes("perday") || msg.includes("per day")) { last = { code: "daily_limit" }; break; }
-          last = { code: "rate_limited" }; await sleep(2500); continue;
+          if (low.includes("perday") || low.includes("per day")) { last = { code: "daily_limit", detail }; break; }
+          last = { code: "rate_limited", detail }; await sleep(2500); continue;
         }
-        if (r.status === 400 && msg.includes("api key")) throw { code: "bad_key" };
-        if (r.status === 403) throw { code: "forbidden" };
-        last = { code: "upstream_error" }; await sleep(1000);
+        if (r.status === 400 && low.includes("api key")) throw { code: "bad_key", detail };
+        if (r.status === 401) throw { code: "bad_key", detail };
+        if (r.status === 403) throw { code: "forbidden", detail };
+        last = { code: "upstream_error", detail }; await sleep(1000);
       }
     }
     throw last;
+  }
+  const PROMPT_BOX = { text: "" };
+  // One call to Gemini that returns a parsed JSON object. Tries each model, then asks Google for the available ones.
+  async function geminiJson(prompt) {
+    if (KEY.length <= 20) throw { code: "no_key" };
+    PROMPT_BOX.text = prompt;
+    try { return await tryModels(MODELS.slice()); }
+    catch (e) {
+      if (e && e.code === "model_missing" && !discovered) {
+        const found = (await discoverModels()).filter(n => !MODELS.includes(n));
+        if (found.length) { MODELS.unshift(...found); return await tryModels(MODELS.slice()); }
+      }
+      throw e;
+    }
   }
   let S = { screen: "setup", me: null, mission: pick(MISSIONS), customMission: "", msgs: [], votes: {}, busy: false, status: "playing", turns: 0, lastError: null, errCode: null };
 
@@ -379,7 +412,7 @@ Responde SOLO con un objeto JSON, sin texto extra ni markdown: {"t":["mensaje 1"
         daily_limit: "Se acabó el cupo gratis de hoy. Vuelve mañana.",
         rate_limited: "Están todos escribiendo a la vez y Google pidió calma. Espera unos segundos y vuelve a intentar."
       };
-      S.lastError = MSG[S.errCode] || "Alguien se quedó sin señal. Escribe de nuevo o toca \"Que hablen ellos\".";
+      S.lastError = (MSG[S.errCode] || "Alguien se quedó sin señal. Escribe de nuevo o toca \"Que hablen ellos\".") + (e && e.detail ? " [" + e.detail + "]" : "");
     }
     pendingSpeaker = null;
     await drained();
